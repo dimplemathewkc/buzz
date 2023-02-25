@@ -1,45 +1,50 @@
+from slack_sdk import WebClient
+
+
+
 import os
 import openai
 from slack_bolt.adapter.socket_mode import SocketModeHandler
-from slack import WebClient
 from slack_bolt import App
 
+SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
+SLACK_APP_TOKEN = os.getenv("SLACK_APP_TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# Event API and web api
-slack_app = App(token=os.environ.get("SLACK_BOT_TOKEN"))
-slack_client = WebClient(token=os.environ.get("SLACK_BOT_TOKEN"))
+# Event API & Web API
+app = App(token=SLACK_BOT_TOKEN)
+client = WebClient(SLACK_BOT_TOKEN)
 
 
-def handle_message(body, logger):
+# This gets activated when the bot is tagged in a channel
+@app.event("message")
+def handle_message_events(body, logger):
+    # Log message
     print(str(body["event"]["text"]).split(">")[1])
+
+    # Create prompt for ChatGPT
     prompt = str(body["event"]["text"]).split(">")[1]
 
-    response = slack_client.chat_postMessage(
-        channel=body["event"]["channel"],
-        thread_ts=body["event"]["ts"],
-        text="Thinking... :bee:",
-    )
+    # Let thre user know that we are busy with the request 
+    response = client.chat_postMessage(channel=body["event"]["channel"],
+                                       thread_ts=body["event"]["event_ts"],
+                                       text=f"Hello from your bot! :robot_face: \nThanks for your request, I'm on it!")
 
-    openai.api_key = os.environ.get("OPENAI_API_KEY")
-    response = (
-        openai.Completion.create(
-            engine="text-davinci-003",
-            prompt=prompt,
-            max_tokens=1024,
-            n=1,
-            stop=None,
-            temperature=0.5,
-        )
-        .choices[0]
-        .text
-    )
+    # Check ChatGPT
+    openai.api_key = OPENAI_API_KEY
+    response = openai.Completion.create(
+        engine="text-davinci-003",
+        prompt=prompt,
+        max_tokens=1024,
+        n=1,
+        stop=None,
+        temperature=0.5).choices[0].text
 
-    # reply to the message
-    response = slack_client.chat_postMessage(
-        channel=body["event"]["channel"],
-        thread_ts=body["event"]["ts"],
-        text=f"Here you go: \n{response}",
-    )
+    # Reply to thread
+    response = client.chat_postMessage(channel=body["event"]["channel"],
+                                       thread_ts=body["event"]["event_ts"],
+                                       text=response)
 
-    if __name__ == "__main__":
-        SocketModeHandler(slack_app, os.environ.get('SLACK_APP_TOKEN')).start()
+
+if __name__ == "__main__":
+    SocketModeHandler(app, SLACK_APP_TOKEN).start()
